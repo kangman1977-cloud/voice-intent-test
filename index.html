@@ -58,7 +58,7 @@ td.mk button.sel-bad{background:#dc2626;color:#fff;border-color:#dc2626}
 </head>
 <body>
 <header>
-  <div><b>語音意圖測試樣本 v3</b> <small>假資料·不連監控·不存任何東西</small></div>
+  <div><b>語音意圖測試樣本 v4</b> <small>假資料·不連監控·不存任何東西</small></div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <label style="font-size:13px">念出結果
       <select id="ttsMode" style="font-size:14px;padding:2px 4px">
@@ -114,10 +114,10 @@ const ITEM_NAMES = ['易拉展 80','易拉展 120','紙腳架 37','背板 A1','�
 function makeItems(n, doneList){ const a=[]; for(let i=1;i<=n;i++){ a.push({no:i,name:ITEM_NAMES[(i-1)%ITEM_NAMES.length],done:doneList.includes(i)}); } return a; }
 function freshData(){
   return [
-    {id:'ABA-0001',cust:'意霏設計',alias:['意霏','意飛','依霏'],caseName:'門市改裝',mine:true,items:makeItems(12,[2])},
-    {id:'ABA-0003',cust:'光華廣告',alias:['光華'],caseName:'展場佈置',mine:true,items:makeItems(15,[6])},
-    {id:'ABB-0003',cust:'大同印刷',alias:['大同'],caseName:'週年慶',mine:true,items:makeItems(10,[])},
-    {id:'G-0007',cust:'晨星展覽',alias:['晨星'],caseName:'春季展',mine:false,items:makeItems(8,[])}
+    {id:'ABA-0001',cust:'意霏設計',alias:['意霏','意飛','依霏'],caseName:'門市改裝',due:'11月20日',mine:true,items:makeItems(12,[2])},
+    {id:'ABA-0003',cust:'光華廣告',alias:['光華'],caseName:'展場佈置',due:'12月1日',mine:true,items:makeItems(15,[6])},
+    {id:'ABB-0003',cust:'大同印刷',alias:['大同'],caseName:'週年慶',due:'11月28日',mine:true,items:makeItems(10,[])},
+    {id:'G-0007',cust:'晨星展覽',alias:['晨星'],caseName:'春季展',due:'12月15日',mine:false,items:makeItems(8,[])}
   ];
 }
 let cases = freshData();
@@ -183,6 +183,11 @@ function parse(raw){
     const c = state.choices.find(x=>x.alias.some(a=>t.includes(a))||t.includes(x.cust));
     if(c) return {intent:'CHOOSE_ID',id:c.id,label:'選 '+c.cust};
   }
+  if(/資訊|資料|進度|狀況|狀態|這張單/.test(t)){
+    if(n!==null && state.screen==='case') return {intent:'ITEMINFO',n,label:'項次資訊 '+pad4(n)};
+    if(n!==null) return {intent:'CASEINFO_N',n,label:'案件資訊 尾數 '+pad4(n)};
+    return {intent:'CASEINFO',label:'案件資訊'};
+  }
   if(/案件|案子|單號|工單|案/.test(t) && n!==null) return {intent:'CASE',n,label:'找案件 尾數 '+pad4(n)};
   const cm = cases.find(x=>x.alias.some(a=>t.includes(a))||t.includes(x.cust));
   if(cm && !/點交|點單|查單|查|看/.test(t)) return {intent:'CUST',id:cm.id,label:'找客戶 '+cm.cust};
@@ -230,6 +235,14 @@ function act(cmd){
       return ['info','進入點交模式：一項一項念號碼；念「復原」或「復原五」取消；念「結束點交」離開'];
     }
     case 'CHECK': return doCheck(cmd.n);
+    case 'CASEINFO': { if(state.screen!=='case') return ['warn','請先打開一張案件，或念「案件三資訊」']; return ['info',caseInfo(curCase())]; }
+    case 'CASEINFO_N': {
+      const list=cases.filter(c=>tail(c.id)===cmd.n);
+      if(!list.length) return ['err','大盤上沒有尾數 '+pad4(cmd.n)+' 的案件'];
+      if(list.length>1){ state.choices=list; return ['warn','有 '+list.length+' 張尾數 '+pad4(cmd.n)+'，請念「第幾個」']; }
+      openCase(list[0].id); return ['info',caseInfo(list[0])];
+    }
+    case 'ITEMINFO': { const it=curCase().items.find(i=>i.no===cmd.n); if(!it) return ['err','這張單沒有 '+pad4(cmd.n)]; state.openItem=it.no; return ['info',pad4(it.no)+'，'+it.name+'，'+(it.done?'已點交':'還沒點交')]; }
     case 'UNDO': {
       if(state.screen!=='case') return ['warn','請先打開一張案件'];
       if(cmd.n){ const it=curCase().items.find(i=>i.no===cmd.n); if(!it) return ['err','這張單沒有 '+pad4(cmd.n)]; if(!it.done) return ['warn',pad4(cmd.n)+' '+it.name+'　本來就沒點交']; it.done=false; state.lastChecked=state.lastChecked.filter(x=>x!==cmd.n); return ['info','已復原 '+pad4(cmd.n)+' '+it.name]; }
@@ -238,6 +251,10 @@ function act(cmd){
     }
   }
   return ['err','聽不懂'];
+}
+function caseInfo(c){
+  const done=c.items.filter(i=>i.done).length, all=c.items.length;
+  return c.cust+'，'+c.caseName+'，交期 '+c.due+'，共 '+all+' 項，已點交 '+done+' 項，還剩 '+(all-done)+' 項';
 }
 function doCheck(n){
   if(state.screen!=='case') return ['err','請先打開一張案件'];
@@ -262,7 +279,7 @@ function render(){
     const c=curCase();
     $('crumb').innerHTML='<a href="#" id="backLink">大盤</a> › '+c.id+'（'+c.cust+'）';
     const done=c.items.filter(i=>i.done).length;
-    v.innerHTML=`<h2>${c.id} ${c.cust}・${c.caseName}　<small style="font-size:13px;color:#6b6b66">已點交 ${done}/${c.items.length}</small></h2>`+
+    v.innerHTML=`<h2>${c.id} ${c.cust}・${c.caseName}・交期 ${c.due}　<small style="font-size:13px;color:#6b6b66">已點交 ${done}/${c.items.length}</small></h2>`+
       c.items.map(i=>`<div class="item ${i.done?'done':''} ${state.openItem===i.no?'open':''}" id="it${i.no}"><b>${pad4(i.no)}</b> ${i.name}<span class="st">${i.done?'✓ 已點交':''}${state.openItem===i.no?'　◀ 打開中':''}</span></div>`).join('');
     const bl=$('backLink'); if(bl) bl.onclick=e=>{e.preventDefault(); handle('（手點）回大盤',['回大盤'],'tap');};
     if(state.openItem){ const el=$('it'+state.openItem); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); }
@@ -270,9 +287,9 @@ function render(){
   v.querySelectorAll('.card').forEach(el=>el.onclick=()=>{ openCase(el.dataset.id); render(); });
   let h='';
   if(state.choices) h='<b>現在可以說：</b>「第一個」「第二個」…／客戶名稱（例：「光華」）／「取消」／「停止」關麥克風';
-  else if(state.screen==='board') h='<b>現在可以說：</b>「我的案件」／「案件三」（只念數字·不念英文）／客戶名稱（例：「意霏」）／「停止」關麥克風';
+  else if(state.screen==='board') h='<b>現在可以說：</b>「我的案件」／「案件三」（只念數字·不念英文）／客戶名稱（例：「意霏」）／「案件三資訊」／「停止」關麥克風';
   else if(state.pick) h='<b>點交模式，可以說：</b>只念號碼「五」「七」「十二」／「復原」取消上一項、「復原五」取消指定項／「結束點交」離開點交（繼續聽）／「停止」關麥克風';
-  else h='<b>現在可以說：</b>「打開五」「看五」「查單五」或只念「五」（打開看）／「點交」（進入連續點交）／「點交七」／「回大盤」／「停止」關麥克風';
+  else h='<b>現在可以說：</b>「打開五」「看五」「查單五」或只念「五」（打開看）／「點交」（進入連續點交）／「點交七」／「案件資訊」／「五號資訊」／「回大盤」／「停止」關麥克風';
   $('hint').innerHTML=h;
 }
 function showResult(kind,text,heardText){
@@ -296,7 +313,7 @@ function beep(kind){
 /* ---------- 念出結果（語音朗讀） ---------- */
 let speaking=false, resumeAfterSpeak=false, speakGuard=null;
 const TTS = window.speechSynthesis || null;
-function digitsToCn(s){ const m='零一二三四五六七八九'; return s.replace(/\d{2,}/g, d=>d.split('').map(x=>m[+x]).join('')); }
+function digitsToCn(s){ const m='零一二三四五六七八九'; return s.replace(/0\d{3}/g, d=>d.split('').map(x=>m[+x]).join('')); }
 function sayText(kind,msg){
   const mode=$('ttsMode').value;
   if(mode==='off' || !TTS) return '';
@@ -365,7 +382,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 $('copyBtn').onclick=async()=>{
   const said=logs.filter(l=>l.screen!=='收音');
   const ok=said.filter(l=>l.mark==='ok').length, bad=said.filter(l=>l.mark==='bad').length;
-  const txt='語音意圖測試紀錄 v3｜'+DEVICE+'｜念出結果:'+$('ttsMode').selectedOptions[0].text+'｜自動停:'+$('idleSec').value+'秒｜'+new Date().toLocaleString('zh-TW')+'\n'+`共 ${said.length} 句｜✓ ${ok}｜✗ ${bad}\n`+
+  const txt='語音意圖測試紀錄 v4｜'+DEVICE+'｜念出結果:'+$('ttsMode').selectedOptions[0].text+'｜自動停:'+$('idleSec').value+'秒｜'+new Date().toLocaleString('zh-TW')+'\n'+`共 ${said.length} 句｜✓ ${ok}｜✗ ${bad}\n`+
     logs.map(l=>[l.ts,l.screen,(l.top?'聽到:'+l.top:''),(l.alts?'備選:'+l.alts:''),'理解:'+l.understood,'結果:'+l.result,(l.mic?'收音:'+l.mic:''),(l.screen==='收音'?'':'標記:'+(l.mark==='ok'?'✓':l.mark==='bad'?'✗':'未標'))].filter(Boolean).join('｜')).join('\n');
   try{ await navigator.clipboard.writeText(txt); $('copyBtn').textContent='已複製 ✓'; setTimeout(()=>$('copyBtn').textContent='複製紀錄',1500); }
   catch(e){ const b=$('copyBox'); b.style.display='block'; b.value=txt; b.select(); $('copyBtn').textContent='請手動複製下面文字'; }
