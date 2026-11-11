@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>語音意圖測試樣本（假資料·不連任何系統）</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;background:#f4f3ef;color:#1f1f1d;padding-bottom:130px}
+header{background:#1f2937;color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+header b{font-size:16px}
+header small{opacity:.8;font-size:12px}
+main{max-width:860px;margin:0 auto;padding:12px}
+.warn{background:#fff4d6;border:1px solid #e8c56b;color:#6b4a00;border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:10px}
+.err{background:#fde8e8;border:1px solid #e9a3a3;color:#7a1f1f}
+.crumb{font-size:13px;color:#6b6b66;margin:4px 0 8px}
+h2{font-size:18px;margin:6px 0 10px}
+.card{background:#fff;border:1px solid #dddcd5;border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer}
+.card.mine{border-left:5px solid #2563eb}
+.card .no{font-weight:600;font-size:16px;min-width:92px}
+.card .meta{font-size:13px;color:#6b6b66}
+.card .badge{margin-left:auto;font-size:12px;padding:2px 8px;border-radius:6px;background:#eef2ff;color:#3730a3}
+.idx{display:inline-flex;width:34px;height:34px;border-radius:50%;background:#2563eb;color:#fff;font-weight:700;font-size:18px;align-items:center;justify-content:center;flex:none}
+.item{background:#fff;border:1px solid #dddcd5;border-radius:8px;padding:8px 10px;margin-bottom:6px;display:flex;align-items:center;gap:10px;font-size:15px}
+.item.open{border:2px solid #2563eb;background:#eef4ff}
+.item.done{background:#eaf6e4;color:#2f5e16}
+.item .st{margin-left:auto;font-size:13px}
+.result{border-radius:10px;padding:12px 14px;margin:10px 0;font-size:20px;font-weight:600;display:none}
+.result small{display:block;font-size:13px;font-weight:400;margin-top:4px}
+.r-ok{background:#e3f4da;color:#24520c}
+.r-warn{background:#fff1cc;color:#6b4a00}
+.r-err{background:#fde3e3;color:#7a1f1f}
+.r-info{background:#e6eefc;color:#1e3a8a}
+.hint{font-size:13px;color:#4b4b47;background:#fff;border:1px dashed #c9c8c0;border-radius:8px;padding:8px 10px;margin:8px 0}
+.hint b{color:#1f1f1d}
+#bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #dddcd5;padding:10px 12px;display:flex;align-items:center;gap:12px;z-index:5}
+#heard{flex:1;font-size:15px;min-height:40px}
+#heard .lbl{font-size:12px;color:#6b6b66}
+#mic{width:68px;height:68px;border-radius:50%;border:none;background:#2563eb;color:#fff;font-size:30px;cursor:pointer;flex:none}
+#mic.on{background:#dc2626;animation:pulse 1.2s infinite}
+#mic.pick{background:#16a34a}
+#mic.pick.on{background:#dc2626}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}100%{box-shadow:0 0 0 16px rgba(220,38,38,0)}}
+#modeTag{font-size:12px;padding:3px 8px;border-radius:6px;background:#e3f4da;color:#24520c;display:none}
+details{background:#fff;border:1px solid #dddcd5;border-radius:10px;padding:8px 12px;margin-top:14px}
+summary{cursor:pointer;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+th,td{border-bottom:1px solid #ecebe5;padding:5px 4px;text-align:left;vertical-align:top}
+td.mk button{padding:2px 7px;margin:0 2px;border:1px solid #c9c8c0;border-radius:6px;background:#fff;cursor:pointer}
+td.mk button.sel-ok{background:#16a34a;color:#fff;border-color:#16a34a}
+td.mk button.sel-bad{background:#dc2626;color:#fff;border-color:#dc2626}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.row input{flex:1;min-width:180px;padding:8px;border:1px solid #c9c8c0;border-radius:8px;font-size:15px}
+.btn{padding:8px 12px;border:1px solid #c9c8c0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px}
+.stats{font-size:13px;color:#4b4b47}
+#copyBox{width:100%;height:120px;margin-top:8px;display:none;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div><b>語音意圖測試樣本</b> <small>假資料·不連監控·不存任何東西</small></div>
+  <small id="dev"></small>
+</header>
+<main>
+  <div id="supportMsg"></div>
+  <div class="crumb" id="crumb"></div>
+  <span id="modeTag">點交模式・連續收音中</span>
+  <div class="result" id="result"></div>
+  <div id="view"></div>
+  <div class="hint" id="hint"></div>
+
+  <details open>
+    <summary>測試紀錄（每一句一列·請按 ✓ 或 ✗ 標記系統有沒有聽對）</summary>
+    <div class="stats" id="stats"></div>
+    <div class="row">
+      <button class="btn" id="copyBtn">複製紀錄</button>
+      <button class="btn" id="resetBtn">資料重來（假資料回原狀）</button>
+    </div>
+    <textarea id="copyBox" readonly></textarea>
+    <table><thead><tr><th>時間</th><th>畫面</th><th>聽到的原文</th><th>系統理解成</th><th>結果</th><th>對嗎</th></tr></thead><tbody id="logBody"></tbody></table>
+  </details>
+
+  <details>
+    <summary>沒有麥克風時：用打字測（走同一套判斷）</summary>
+    <div class="row"><input id="typeIn" placeholder="例如：我的案件、案件三、第一個、查單五、點交、復原、停止"><button class="btn" id="typeBtn">送出</button></div>
+  </details>
+</main>
+
+<div id="bar">
+  <div id="heard"><span class="lbl">按右邊麥克風，然後說話</span></div>
+  <button id="mic" aria-label="開始或停止收音">🎤</button>
+</div>
+
+<script>
+'use strict';
+const ME = '測試師傅';
+const ITEM_NAMES = ['易拉展 80','易拉展 120','紙腳架 37','背板 A1','布條 3米','貼紙 A4','海報 A2','立牌','吊旗','桌卡','地貼','燈箱片'];
+function makeItems(n, doneList){ const a=[]; for(let i=1;i<=n;i++){ a.push({no:i,name:ITEM_NAMES[(i-1)%ITEM_NAMES.length],done:doneList.includes(i)}); } return a; }
+function freshData(){
+  return [
+    {id:'ABA-0001',cust:'意霏設計',alias:['意霏','意飛','依霏'],caseName:'門市改裝',mine:true,items:makeItems(12,[2])},
+    {id:'ABA-0003',cust:'光華廣告',alias:['光華'],caseName:'展場佈置',mine:true,items:makeItems(15,[6])},
+    {id:'ABB-0003',cust:'大同印刷',alias:['大同'],caseName:'週年慶',mine:true,items:makeItems(10,[])},
+    {id:'G-0007',cust:'晨星展覽',alias:['晨星'],caseName:'春季展',mine:false,items:makeItems(8,[])}
+  ];
+}
+let cases = freshData();
+let state = {screen:'board', caseId:null, openItem:null, choices:null, pick:false, lastChecked:[]};
+let logs = [];
+
+const $ = id => document.getElementById(id);
+const tail = id => parseInt(id.split('-').pop(),10);
+const curCase = () => cases.find(c=>c.id===state.caseId);
+const pad4 = n => String(n).padStart(4,'0');
+
+(function dev(){
+  const u=navigator.userAgent; let d='電腦';
+  if(/iPad|Macintosh/.test(u)&&'ontouchend' in document) d='iPad'; else if(/iPhone/.test(u)) d='iPhone'; else if(/Android/.test(u)) d='Android';
+  let b='其他瀏覽器'; if(/Edg\//.test(u)) b='Edge'; else if(/CriOS|Chrome\//.test(u)) b='Chrome'; else if(/Firefox|FxiOS/.test(u)) b='Firefox'; else if(/Safari/.test(u)) b='Safari';
+  window.DEVICE = d+'·'+b; $('dev').textContent = DEVICE + (window.isSecureContext?'·安全連線':'·⚠️非安全連線');
+})();
+
+/* ---------- 中文數字 ---------- */
+const DIG = {'零':0,'〇':0,'○':0,'一':1,'壹':1,'幺':1,'么':1,'二':2,'貳':2,'兩':2,'两':2,'三':3,'參':3,'四':4,'肆':4,'五':5,'伍':5,'六':6,'陸':6,'七':7,'柒':7,'八':8,'捌':8,'九':9,'玖':9};
+const NUMCH = '0-9零〇○一壹幺么二貳兩两三參四肆五伍六陸七柒八捌九玖十拾百佰千';
+function cnToNum(s){
+  if(/^[0-9]+$/.test(s)) return parseInt(s,10);
+  if(/[十拾百佰千]/.test(s)){
+    let total=0,cur=0,hasDigit=false;
+    for(const ch of s){
+      if(/[0-9]/.test(ch)){cur=cur*10+(+ch);hasDigit=true;continue;}
+      if(ch in DIG){cur=DIG[ch];hasDigit=true;continue;}
+      const unit = (ch==='十'||ch==='拾')?10:(ch==='百'||ch==='佰')?100:(ch==='千')?1000:0;
+      if(unit){ total += (cur||1)*unit; cur=0; }
+    }
+    return total+cur;
+  }
+  let out=''; for(const ch of s){ if(/[0-9]/.test(ch)) out+=ch; else if(ch in DIG) out+=DIG[ch]; }
+  return out===''?null:parseInt(out,10);
+}
+function clean(t){
+  return t.replace(/[\s，。、？！,.?!：:「」"'～~]/g,'')
+          .replace(/等一下|一下|一起|一樣|一點|一個一個/g,'');
+}
+function firstNum(t){
+  const m = t.match(new RegExp('['+NUMCH+']+'));
+  return m ? cnToNum(m[0]) : null;
+}
+
+/* ---------- 意圖判斷：回傳 {intent, n, label} 或 null ---------- */
+function parse(raw){
+  const t = clean(raw);
+  if(!t) return null;
+  const n = firstNum(t);
+  if(/停止|結束|收工|好了|完成|停$/.test(t)) return {intent:'STOP',label:'停止'};
+  if(/大盤|返回|回去|回首頁/.test(t)) return {intent:'BACK',label:'回大盤'};
+  if(state.choices && /^取消$|不要/.test(t)) return {intent:'CANCEL',label:'取消選擇'};
+  if(/復原|還原|撤銷|取消|上一個不要|剛剛不算|剛才不算/.test(t)) return {intent:'UNDO',label:'復原上一項'};
+  if(/我的(案件|案子|工單|單)/.test(t)) return {intent:'MY',label:'我的案件'};
+  if(state.choices){
+    const m = t.match(new RegExp('第(['+NUMCH+']+)'));
+    if(m){ const k=cnToNum(m[1]); return {intent:'CHOOSE',n:k,label:'選第 '+k+' 個'}; }
+    const c = state.choices.find(x=>x.alias.some(a=>t.includes(a))||t.includes(x.cust));
+    if(c) return {intent:'CHOOSE_ID',id:c.id,label:'選 '+c.cust};
+  }
+  if(/案件|案子|單號|工單|案/.test(t) && n!==null) return {intent:'CASE',n,label:'找案件 尾數 '+pad4(n)};
+  const cm = cases.find(x=>x.alias.some(a=>t.includes(a))||t.includes(x.cust));
+  if(cm && !/點交|點單|查單|查|看/.test(t)) return {intent:'CUST',id:cm.id,label:'找客戶 '+cm.cust};
+  if(/點交|點單|點收|出貨|交貨/.test(t)) return {intent:'PICK',n,label: n!==null?'點交 '+pad4(n):'進入點交模式'};
+  if(/查單|查|看|打開|開啟|開/.test(t) && n!==null) return {intent:'VIEW',n,label:'查單（看）'+pad4(n)};
+  if(n!==null && t.replace(new RegExp('[號项項第個號]','g'),'').match(new RegExp('^['+NUMCH+']+$'))){
+    if(state.choices) return {intent:'CHOOSE',n,label:'選第 '+n+' 個'};
+    if(state.pick) return {intent:'CHECK',n,label:'點交 '+pad4(n)};
+    if(state.screen==='case') return {intent:'VIEW',n,label:'查單（看）'+pad4(n)};
+    return {intent:'CASE',n,label:'找案件 尾數 '+pad4(n)};
+  }
+  return null;
+}
+
+/* ---------- 動作 ---------- */
+function act(cmd){
+  switch(cmd.intent){
+    case 'STOP': if(state.pick){ stopPick('已停止點交模式'); return ['info','已停止點交模式']; } stopListen(); return ['info','已停止收音'];
+    case 'BACK': stopPick(); state.screen='board'; state.caseId=null; state.openItem=null; state.choices=null; return ['info','回到大盤'];
+    case 'CANCEL': state.choices=null; return ['info','已取消選擇'];
+    case 'MY': { const list=cases.filter(c=>c.mine); state.screen='board'; state.caseId=null; stopPick(); state.choices=list; wantFollowUp=true; return ['info','你的案件有 '+list.length+' 張，請念「第幾個」']; }
+    case 'CASE': {
+      const list=cases.filter(c=>tail(c.id)===cmd.n);
+      if(!list.length) return ['err','大盤上沒有尾數 '+pad4(cmd.n)+' 的案件'];
+      if(list.length===1){ openCase(list[0].id); return ['ok','已打開 '+list[0].id+'（'+list[0].cust+'）']; }
+      state.choices=list; wantFollowUp=true; return ['warn','有 '+list.length+' 張尾數 '+pad4(cmd.n)+'，請念「第幾個」'];
+    }
+    case 'CUST': { const c=cases.find(x=>x.id===cmd.id); const list=cases.filter(x=>x.cust===c.cust);
+      if(list.length===1){ openCase(c.id); return ['ok','已打開 '+c.id+'（'+c.cust+'）']; }
+      state.choices=list; wantFollowUp=true; return ['warn','請念「第幾個」']; }
+    case 'CHOOSE': { const c=state.choices&&state.choices[cmd.n-1]; if(!c) return ['err','清單上沒有第 '+cmd.n+' 個']; openCase(c.id); return ['ok','已打開 '+c.id+'（'+c.cust+'）']; }
+    case 'CHOOSE_ID': { openCase(cmd.id); const c=curCase(); return ['ok','已打開 '+c.id+'（'+c.cust+'）']; }
+    case 'VIEW': {
+      if(state.screen!=='case') return ['err','請先打開一張案件（例如念「我的案件」）'];
+      const it=curCase().items.find(i=>i.no===cmd.n); if(!it) return ['err','這張單沒有項次 '+pad4(cmd.n)];
+      state.openItem=it.no; return ['ok','已打開 '+pad4(it.no)+' '+it.name+(it.done?'（已點交）':'')];
+    }
+    case 'PICK': {
+      if(state.screen!=='case') return ['err','請先打開一張案件，再說「點交」'];
+      state.pick=true; updateMic();
+      if(cmd.n!==null){ return doCheck(cmd.n); }
+      return ['info','進入點交模式：一項一項念號碼，念「復原」取消上一項，念「停止」結束'];
+    }
+    case 'CHECK': return doCheck(cmd.n);
+    case 'UNDO': {
+      if(state.screen!=='case' || !state.lastChecked.length) return ['warn','沒有可以復原的'];
+      const no=state.lastChecked.pop(); const it=curCase().items.find(i=>i.no===no); it.done=false; return ['info','已復原 '+pad4(no)+' '+it.name];
+    }
+  }
+  return ['err','聽不懂'];
+}
+function doCheck(n){
+  if(state.screen!=='case') return ['err','請先打開一張案件'];
+  const it=curCase().items.find(i=>i.no===n);
+  if(!it) return ['err','這張單沒有 '+pad4(n)];
+  if(it.done) return ['warn',pad4(n)+' '+it.name+'　之前已點交'];
+  it.done=true; state.lastChecked.push(n); state.openItem=n; return ['ok',pad4(n)+' '+it.name+'　已點交'];
+}
+function openCase(id){ state.screen='case'; state.caseId=id; state.choices=null; state.openItem=null; state.lastChecked=[]; }
+
+/* ---------- 畫面 ---------- */
+function render(){
+  const v=$('view');
+  $('modeTag').style.display = state.pick?'inline-block':'none';
+  if(state.choices){
+    $('crumb').textContent='大盤 › 請選一張';
+    v.innerHTML='<h2>請念「第幾個」，或直接點</h2>'+state.choices.map((c,i)=>`<div class="card ${c.mine?'mine':''}" data-id="${c.id}"><span class="idx">${i+1}</span><span class="no">${c.id}</span><span class="meta">${c.cust}・${c.caseName}</span></div>`).join('');
+  } else if(state.screen==='board'){
+    $('crumb').textContent='大盤（登入身分：'+ME+'）';
+    v.innerHTML='<h2>大盤・進行中案件</h2>'+cases.map(c=>`<div class="card ${c.mine?'mine':''}" data-id="${c.id}"><span class="no">${c.id}</span><span class="meta">${c.cust}・${c.caseName}・${c.items.length} 項</span>${c.mine?'<span class="badge">派給我</span>':''}</div>`).join('');
+  } else {
+    const c=curCase();
+    $('crumb').innerHTML='<a href="#" id="backLink">大盤</a> › '+c.id+'（'+c.cust+'）';
+    const done=c.items.filter(i=>i.done).length;
+    v.innerHTML=`<h2>${c.id} ${c.cust}・${c.caseName}　<small style="font-size:13px;color:#6b6b66">已點交 ${done}/${c.items.length}</small></h2>`+
+      c.items.map(i=>`<div class="item ${i.done?'done':''} ${state.openItem===i.no?'open':''}" id="it${i.no}"><b>${pad4(i.no)}</b> ${i.name}<span class="st">${i.done?'✓ 已點交':''}${state.openItem===i.no?'　◀ 打開中':''}</span></div>`).join('');
+    const bl=$('backLink'); if(bl) bl.onclick=e=>{e.preventDefault(); handle('（手點）回大盤',['回大盤'],'tap');};
+    if(state.openItem){ const el=$('it'+state.openItem); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); }
+  }
+  v.querySelectorAll('.card').forEach(el=>el.onclick=()=>{ openCase(el.dataset.id); render(); });
+  let h='';
+  if(state.choices) h='<b>現在可以說：</b>「第一個」「第二個」…／客戶名稱（例：「光華」）／「取消」';
+  else if(state.screen==='board') h='<b>現在可以說：</b>「我的案件」／「案件三」（只念數字·不念英文）／客戶名稱（例：「意霏」）';
+  else if(state.pick) h='<b>點交模式，可以說：</b>只念號碼「五」「七」「十二」／「復原」取消上一項／「停止」結束';
+  else h='<b>現在可以說：</b>「查單五」或只念「五」（打開看）／「點交」（進入連續點交）／「點交七」／「回大盤」';
+  $('hint').innerHTML=h;
+}
+function showResult(kind,text,heardText){
+  const r=$('result'); r.className='result r-'+kind; r.style.display='block';
+  r.innerHTML=({ok:'✓ ',warn:'⚠ ',err:'✗ ',info:''}[kind])+text+(heardText?'<small>聽到：「'+heardText+'」</small>':'');
+  beep(kind);
+}
+
+/* ---------- 聲音提示 ---------- */
+let actx=null;
+function beep(kind){
+  try{
+    if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)();
+    const plan={ok:[[880,.12]],warn:[[520,.12],[520,.12]],err:[[220,.35]],info:[[660,.08]]}[kind]||[];
+    let t=actx.currentTime;
+    plan.forEach(([f,d])=>{ const o=actx.createOscillator(), g=actx.createGain(); o.frequency.value=f; g.gain.value=.15; o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t+d); t+=d+.06; });
+    if(navigator.vibrate) navigator.vibrate(kind==='ok'?60:kind==='err'?[80,60,80]:30);
+  }catch(e){}
+}
+
+/* ---------- 處理一句話 ---------- */
+let wantFollowUp=false, pendingFollow=false;
+function handle(top, alts, src){
+  const isTap = src==='tap';
+  wantFollowUp=false;
+  let cmd=null, used=top;
+  for(const a of alts){ const c=parse(a); if(c){cmd=c; used=a; break;} }
+  const screenName = state.choices?'選擇中':state.screen==='board'?'大盤':(state.pick?'點交模式':'案件頁');
+  let kind,msg;
+  if(!cmd){ kind='err'; msg='聽不懂這句（請看下方「現在可以說」）'; }
+  else { [kind,msg]=act(cmd); }
+  render(); showResult(kind,msg,isTap?'':top);
+  if(!isTap) addLog(screenName, top, alts, cmd?cmd.label:'（聽不懂）', msg);
+  pendingFollow = (src==='voice' && wantFollowUp && !state.pick);
+}
+
+/* ---------- 紀錄 ---------- */
+function addLog(screen, top, alts, understood, result){
+  const t=new Date(); const ts=t.toTimeString().slice(0,8);
+  logs.push({ts,screen,top,alts:alts.slice(1).join(' / '),understood,result,mark:''});
+  drawLog();
+}
+function drawLog(){
+  $('logBody').innerHTML=logs.map((l,i)=>`<tr><td>${l.ts}</td><td>${l.screen}</td><td>${esc(l.top)}${l.alts?'<br><span style="color:#8a8a84">備選：'+esc(l.alts)+'</span>':''}</td><td>${esc(l.understood)}</td><td>${esc(l.result)}</td><td class="mk"><button data-i="${i}" data-m="ok" class="${l.mark==='ok'?'sel-ok':''}">✓</button><button data-i="${i}" data-m="bad" class="${l.mark==='bad'?'sel-bad':''}">✗</button></td></tr>`).reverse().join('');
+  $('logBody').querySelectorAll('button').forEach(b=>b.onclick=()=>{ logs[b.dataset.i].mark=b.dataset.m; drawLog(); });
+  const ok=logs.filter(l=>l.mark==='ok').length, bad=logs.filter(l=>l.mark==='bad').length;
+  $('stats').textContent=`共 ${logs.length} 句｜標 ✓ ${ok}｜標 ✗ ${bad}｜未標 ${logs.length-ok-bad}`+(ok+bad?`｜正確率 ${Math.round(ok*100/(ok+bad))}%`:'');
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+$('copyBtn').onclick=async()=>{
+  const ok=logs.filter(l=>l.mark==='ok').length, bad=logs.filter(l=>l.mark==='bad').length;
+  const txt='語音意圖測試紀錄｜'+DEVICE+'｜'+new Date().toLocaleString('zh-TW')+'\n'+`共 ${logs.length} 句｜✓ ${ok}｜✗ ${bad}\n`+
+    logs.map(l=>[l.ts,l.screen,'聽到:'+l.top,(l.alts?'備選:'+l.alts:''),'理解:'+l.understood,'結果:'+l.result,'標記:'+(l.mark==='ok'?'✓':l.mark==='bad'?'✗':'未標')].filter(Boolean).join('｜')).join('\n');
+  try{ await navigator.clipboard.writeText(txt); $('copyBtn').textContent='已複製 ✓'; setTimeout(()=>$('copyBtn').textContent='複製紀錄',1500); }
+  catch(e){ const b=$('copyBox'); b.style.display='block'; b.value=txt; b.select(); $('copyBtn').textContent='請手動複製下面文字'; }
+};
+$('resetBtn').onclick=()=>{ stopPick(); cases=freshData(); state={screen:'board',caseId:null,openItem:null,choices:null,pick:false,lastChecked:[]}; render(); showResult('info','假資料已回原狀'); };
+$('typeBtn').onclick=()=>{ const v=$('typeIn').value.trim(); if(!v) return; handle(v,[v],'type'); $('typeIn').value=''; };
+$('typeIn').addEventListener('keydown',e=>{ if(e.key==='Enter') $('typeBtn').click(); });
+
+/* ---------- 語音辨識 ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec=null, listening=false, idleTimer=null, manualStop=false;
+if(!SR){
+  $('supportMsg').innerHTML='<div class="warn err">這個瀏覽器不支援網頁語音辨識（請記下裝置與瀏覽器：'+DEVICE+'）。可以先用下方「打字測」。</div>';
+}else if(!window.isSecureContext){
+  $('supportMsg').innerHTML='<div class="warn err">這個網址不是安全連線，瀏覽器不會讓網頁用麥克風。</div>';
+}
+function updateMic(){ const m=$('mic'); m.classList.toggle('on',listening); m.classList.toggle('pick',state.pick); m.textContent=listening?'■':'🎤'; render(); }
+function startListen(){
+  if(!SR) { showResult('err','這個瀏覽器不支援語音辨識'); return; }
+  if(listening) return;
+  rec=new SR(); rec.lang='zh-TW'; rec.interimResults=true; rec.maxAlternatives=3; rec.continuous=!!state.pick;
+  manualStop=false;
+  rec.onstart=()=>{ listening=true; updateMic(); $('heard').innerHTML='<span class="lbl">收音中…請說話</span>'; resetIdle(); };
+  rec.onresult=e=>{
+    resetIdle();
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const r=e.results[i];
+      if(!r.isFinal){ $('heard').innerHTML='<span class="lbl">聽到中：</span>'+esc(r[0].transcript); continue; }
+      const alts=[]; for(let k=0;k<r.length;k++) alts.push(r[k].transcript.trim());
+      $('heard').innerHTML='<span class="lbl">聽到：</span>'+esc(alts[0]);
+      handle(alts[0],alts,'voice');
+    }
+  };
+  rec.onerror=e=>{
+    const map={'not-allowed':'麥克風權限被拒（或手機不准自動開麥克風）','no-speech':'沒聽到聲音','audio-capture':'找不到麥克風','network':'網路問題（辨識要連網）','aborted':'已中斷'};
+    if(e.error!=='no-speech'&&e.error!=='aborted') showResult('err','收音錯誤：'+(map[e.error]||e.error));
+    if(e.error==='not-allowed') { state.pick=false; manualStop=true; }
+  };
+  rec.onend=()=>{
+    listening=false; updateMic();
+    if(state.pick && !manualStop){ setTimeout(()=>{ try{ startListen(); }catch(err){ showResult('err','手機不准自動重新收音，請再按一下麥克風'); } },250); }
+    else if(pendingFollow){ pendingFollow=false; setTimeout(()=>{ try{ startListen(); $('heard').innerHTML='<span class="lbl">自動繼續聽（請念第幾個）…</span>'; }catch(err){ showResult('warn','手機不准自動繼續聽：請按麥克風再念「第幾個」，或直接點'); } },300); }
+    else $('heard').innerHTML='<span class="lbl">已停止收音。按麥克風再說一次</span>';
+  };
+  try{ rec.start(); }catch(err){ showResult('err','無法開始收音：'+err.message); }
+}
+function stopListen(){ manualStop=true; clearTimeout(idleTimer); try{ rec&&rec.stop(); }catch(e){} }
+function stopPick(msg){ if(state.pick){ state.pick=false; stopListen(); } }
+function resetIdle(){ clearTimeout(idleTimer); idleTimer=setTimeout(()=>{ if(state.pick){ stopPick(); render(); showResult('info','安靜 20 秒，點交模式自動停止'); } else stopListen(); }, state.pick?20000:8000); }
+$('mic').onclick=()=>{
+  if(actx&&actx.state==='suspended') actx.resume();
+  if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  if(listening){ if(state.pick){ stopPick(); render(); showResult('info','已停止點交模式'); } else stopListen(); }
+  else startListen();
+};
+render(); drawLog();
+</script>
+</body>
+</html>
