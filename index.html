@@ -58,8 +58,17 @@ td.mk button.sel-bad{background:#dc2626;color:#fff;border-color:#dc2626}
 </head>
 <body>
 <header>
-  <div><b>語音意圖測試樣本</b> <small>假資料·不連監控·不存任何東西</small></div>
-  <small id="dev"></small>
+  <div><b>語音意圖測試樣本 v2</b> <small>假資料·不連監控·不存任何東西</small></div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <label style="font-size:13px">念出結果
+      <select id="ttsMode" style="font-size:14px;padding:2px 4px">
+        <option value="full">完整念</option>
+        <option value="short">簡短念</option>
+        <option value="off">不念</option>
+      </select>
+    </label>
+    <small id="dev"></small>
+  </div>
 </header>
 <main>
   <div id="supportMsg"></div>
@@ -77,7 +86,7 @@ td.mk button.sel-bad{background:#dc2626;color:#fff;border-color:#dc2626}
       <button class="btn" id="resetBtn">資料重來（假資料回原狀）</button>
     </div>
     <textarea id="copyBox" readonly></textarea>
-    <table><thead><tr><th>時間</th><th>畫面</th><th>聽到的原文</th><th>系統理解成</th><th>結果</th><th>對嗎</th></tr></thead><tbody id="logBody"></tbody></table>
+    <table><thead><tr><th>時間</th><th>畫面</th><th>聽到的原文</th><th>系統理解成</th><th>結果</th><th>收音</th><th>對嗎</th></tr></thead><tbody id="logBody"></tbody></table>
   </details>
 
   <details>
@@ -140,6 +149,7 @@ function cnToNum(s){
 }
 function clean(t){
   return t.replace(/[\s，。、？！,.?!：:「」"'～~]/g,'')
+          .replace(/按鍵|案見|暗箭|岸見|按件/g,'案件').replace(/罰單|茶單|查丹|察單/g,'查單')
           .replace(/等一下|一下|一起|一樣|一點|一個一個/g,'');
 }
 function firstNum(t){
@@ -157,6 +167,8 @@ function parse(raw){
   if(state.choices && /^取消$|不要/.test(t)) return {intent:'CANCEL',label:'取消選擇'};
   if(/復原|還原|撤銷|取消|上一個不要|剛剛不算|剛才不算/.test(t)) return {intent:'UNDO',label:'復原上一項'};
   if(/我的(案件|案子|工單|單)/.test(t)) return {intent:'MY',label:'我的案件'};
+  if(!state.choices && new RegExp('^第['+NUMCH+']+(個|筆|張)?$').test(t)) return {intent:'NOLIST',label:'第幾個（但沒有清單）'};
+  if(n===0) return {intent:'UNCLEAR',label:'號碼沒聽清楚'};
   if(state.choices){
     const m = t.match(new RegExp('第(['+NUMCH+']+)'));
     if(m){ const k=cnToNum(m[1]); return {intent:'CHOOSE',n:k,label:'選第 '+k+' 個'}; }
@@ -183,6 +195,8 @@ function act(cmd){
     case 'STOP': if(state.pick){ stopPick('已停止點交模式'); return ['info','已停止點交模式']; } stopListen(); return ['info','已停止收音'];
     case 'BACK': stopPick(); state.screen='board'; state.caseId=null; state.openItem=null; state.choices=null; return ['info','回到大盤'];
     case 'CANCEL': state.choices=null; return ['info','已取消選擇'];
+    case 'NOLIST': return ['warn','現在沒有清單，請先說「我的案件」'];
+    case 'UNCLEAR': return ['warn','號碼沒聽清楚，請再念一次'];
     case 'MY': { const list=cases.filter(c=>c.mine); state.screen='board'; state.caseId=null; stopPick(); state.choices=list; wantFollowUp=true; return ['info','你的案件有 '+list.length+' 張，請念「第幾個」']; }
     case 'CASE': {
       const list=cases.filter(c=>tail(c.id)===cmd.n);
@@ -247,7 +261,7 @@ function render(){
   if(state.choices) h='<b>現在可以說：</b>「第一個」「第二個」…／客戶名稱（例：「光華」）／「取消」';
   else if(state.screen==='board') h='<b>現在可以說：</b>「我的案件」／「案件三」（只念數字·不念英文）／客戶名稱（例：「意霏」）';
   else if(state.pick) h='<b>點交模式，可以說：</b>只念號碼「五」「七」「十二」／「復原」取消上一項／「停止」結束';
-  else h='<b>現在可以說：</b>「查單五」或只念「五」（打開看）／「點交」（進入連續點交）／「點交七」／「回大盤」';
+  else h='<b>現在可以說：</b>「打開五」「看五」「查單五」或只念「五」（打開看）／「點交」（進入連續點交）／「點交七」／「回大盤」';
   $('hint').innerHTML=h;
 }
 function showResult(kind,text,heardText){
@@ -268,6 +282,38 @@ function beep(kind){
   }catch(e){}
 }
 
+/* ---------- 念出結果（語音朗讀） ---------- */
+let speaking=false, resumeAfterSpeak=false, speakGuard=null;
+const TTS = window.speechSynthesis || null;
+function digitsToCn(s){ const m='零一二三四五六七八九'; return s.replace(/\d{2,}/g, d=>d.split('').map(x=>m[+x]).join('')); }
+function sayText(kind,msg){
+  const mode=$('ttsMode').value;
+  if(mode==='off' || !TTS) return '';
+  const plain=msg.replace(/[（(].*?[）)]/g,'').replace(/[「」]/g,'').replace(/　/g,'，');
+  if(mode==='short'){
+    if(kind==='ok') return '好';
+    return plain;
+  }
+  return plain;
+}
+function speak(kind,msg){
+  const text=sayText(kind,msg);
+  if(!text) return false;
+  try{
+    TTS.cancel();
+    const u=new SpeechSynthesisUtterance(digitsToCn(text));
+    u.lang='zh-TW'; u.rate=1.15;
+    const vs=TTS.getVoices().filter(v=>/zh[-_]TW|zh-Hant|Taiwan|國語|臺灣|台灣/i.test(v.lang+' '+v.name));
+    if(vs.length) u.voice=vs[0];
+    speaking=true;
+    const done=()=>{ if(!speaking) return; speaking=false; clearTimeout(speakGuard); if(resumeAfterSpeak){ resumeAfterSpeak=false; autoStart('念完後繼續'); } };
+    u.onend=done; u.onerror=done;
+    speakGuard=setTimeout(done, 8000);
+    TTS.speak(u);
+    return true;
+  }catch(e){ speaking=false; return false; }
+}
+
 /* ---------- 處理一句話 ---------- */
 let wantFollowUp=false, pendingFollow=false;
 function handle(top, alts, src){
@@ -280,27 +326,30 @@ function handle(top, alts, src){
   if(!cmd){ kind='err'; msg='聽不懂這句（請看下方「現在可以說」）'; }
   else { [kind,msg]=act(cmd); }
   render(); showResult(kind,msg,isTap?'':top);
-  if(!isTap) addLog(screenName, top, alts, cmd?cmd.label:'（聽不懂）', msg);
+  if(src!=='tap') speak(kind, cmd?msg:'聽不懂，請再說一次');
+  if(!isTap) addLog(screenName, top, alts, cmd?cmd.label:'（聽不懂）', msg, src==='voice'?sessionInfo:'打字');
   pendingFollow = (src==='voice' && wantFollowUp && !state.pick);
 }
 
 /* ---------- 紀錄 ---------- */
-function addLog(screen, top, alts, understood, result){
+function addLog(screen, top, alts, understood, result, mic){
   const t=new Date(); const ts=t.toTimeString().slice(0,8);
-  logs.push({ts,screen,top,alts:alts.slice(1).join(' / '),understood,result,mark:''});
+  logs.push({ts,screen,top,alts:(alts||[]).slice(1).join(' / '),understood,result,mic:mic||'',mark:''});
   drawLog();
 }
 function drawLog(){
-  $('logBody').innerHTML=logs.map((l,i)=>`<tr><td>${l.ts}</td><td>${l.screen}</td><td>${esc(l.top)}${l.alts?'<br><span style="color:#8a8a84">備選：'+esc(l.alts)+'</span>':''}</td><td>${esc(l.understood)}</td><td>${esc(l.result)}</td><td class="mk"><button data-i="${i}" data-m="ok" class="${l.mark==='ok'?'sel-ok':''}">✓</button><button data-i="${i}" data-m="bad" class="${l.mark==='bad'?'sel-bad':''}">✗</button></td></tr>`).reverse().join('');
+  $('logBody').innerHTML=logs.map((l,i)=>`<tr><td>${l.ts}</td><td>${l.screen}</td><td>${esc(l.top)}${l.alts?'<br><span style="color:#8a8a84">備選：'+esc(l.alts)+'</span>':''}</td><td>${esc(l.understood)}</td><td>${esc(l.result)}</td><td>${esc(l.mic)}</td><td class="mk">${l.screen==='收音'?'':`<button data-i="${i}" data-m="ok" class="${l.mark==='ok'?'sel-ok':''}">✓</button><button data-i="${i}" data-m="bad" class="${l.mark==='bad'?'sel-bad':''}">✗</button>`}</td></tr>`).reverse().join('');
   $('logBody').querySelectorAll('button').forEach(b=>b.onclick=()=>{ logs[b.dataset.i].mark=b.dataset.m; drawLog(); });
-  const ok=logs.filter(l=>l.mark==='ok').length, bad=logs.filter(l=>l.mark==='bad').length;
-  $('stats').textContent=`共 ${logs.length} 句｜標 ✓ ${ok}｜標 ✗ ${bad}｜未標 ${logs.length-ok-bad}`+(ok+bad?`｜正確率 ${Math.round(ok*100/(ok+bad))}%`:'');
+  const said=logs.filter(l=>l.screen!=='收音');
+  const ok=said.filter(l=>l.mark==='ok').length, bad=said.filter(l=>l.mark==='bad').length;
+  $('stats').textContent=`共 ${said.length} 句｜標 ✓ ${ok}｜標 ✗ ${bad}｜未標 ${said.length-ok-bad}`+(ok+bad?`｜正確率 ${Math.round(ok*100/(ok+bad))}%`:'')+`｜收音事件 ${logs.length-said.length} 筆`;
 }
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 $('copyBtn').onclick=async()=>{
-  const ok=logs.filter(l=>l.mark==='ok').length, bad=logs.filter(l=>l.mark==='bad').length;
-  const txt='語音意圖測試紀錄｜'+DEVICE+'｜'+new Date().toLocaleString('zh-TW')+'\n'+`共 ${logs.length} 句｜✓ ${ok}｜✗ ${bad}\n`+
-    logs.map(l=>[l.ts,l.screen,'聽到:'+l.top,(l.alts?'備選:'+l.alts:''),'理解:'+l.understood,'結果:'+l.result,'標記:'+(l.mark==='ok'?'✓':l.mark==='bad'?'✗':'未標')].filter(Boolean).join('｜')).join('\n');
+  const said=logs.filter(l=>l.screen!=='收音');
+  const ok=said.filter(l=>l.mark==='ok').length, bad=said.filter(l=>l.mark==='bad').length;
+  const txt='語音意圖測試紀錄 v2｜'+DEVICE+'｜念出結果:'+$('ttsMode').selectedOptions[0].text+'｜'+new Date().toLocaleString('zh-TW')+'\n'+`共 ${said.length} 句｜✓ ${ok}｜✗ ${bad}\n`+
+    logs.map(l=>[l.ts,l.screen,(l.top?'聽到:'+l.top:''),(l.alts?'備選:'+l.alts:''),'理解:'+l.understood,'結果:'+l.result,(l.mic?'收音:'+l.mic:''),(l.screen==='收音'?'':'標記:'+(l.mark==='ok'?'✓':l.mark==='bad'?'✗':'未標'))].filter(Boolean).join('｜')).join('\n');
   try{ await navigator.clipboard.writeText(txt); $('copyBtn').textContent='已複製 ✓'; setTimeout(()=>$('copyBtn').textContent='複製紀錄',1500); }
   catch(e){ const b=$('copyBox'); b.style.display='block'; b.value=txt; b.select(); $('copyBtn').textContent='請手動複製下面文字'; }
 };
@@ -308,23 +357,34 @@ $('resetBtn').onclick=()=>{ stopPick(); cases=freshData(); state={screen:'board'
 $('typeBtn').onclick=()=>{ const v=$('typeIn').value.trim(); if(!v) return; handle(v,[v],'type'); $('typeIn').value=''; };
 $('typeIn').addEventListener('keydown',e=>{ if(e.key==='Enter') $('typeBtn').click(); });
 
-/* ---------- 語音辨識 ---------- */
+/* ---------- 語音辨識（v2：一律「聽一句 → 自動重開」） ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec=null, listening=false, idleTimer=null, manualStop=false;
+let rec=null, listening=false, idleTimer=null, manualStop=false, sessionNo=0, sessionInfo='', lastHeard=0;
+const PICK_IDLE=20000;
 if(!SR){
   $('supportMsg').innerHTML='<div class="warn err">這個瀏覽器不支援網頁語音辨識（請記下裝置與瀏覽器：'+DEVICE+'）。可以先用下方「打字測」。</div>';
 }else if(!window.isSecureContext){
   $('supportMsg').innerHTML='<div class="warn err">這個網址不是安全連線，瀏覽器不會讓網頁用麥克風。</div>';
 }
+function sysLog(msg){ addLog('收音','',[],'（系統）',msg,sessionInfo); }
 function updateMic(){ const m=$('mic'); m.classList.toggle('on',listening); m.classList.toggle('pick',state.pick); m.textContent=listening?'■':'🎤'; render(); }
-function startListen(){
+function autoStart(why){
+  setTimeout(()=>{
+    if(listening || speaking) { if(speaking) resumeAfterSpeak=true; return; }
+    try{ startListen(why); }
+    catch(err){ sysLog('自動重開失敗：'+err.message+'（'+why+'）'); showResult('warn','手機不准自動重開收音，請再按一下麥克風'); }
+  },250);
+}
+function startListen(origin){
   if(!SR) { showResult('err','這個瀏覽器不支援語音辨識'); return; }
   if(listening) return;
-  rec=new SR(); rec.lang='zh-TW'; rec.interimResults=true; rec.maxAlternatives=3; rec.continuous=!!state.pick;
+  if(speaking){ resumeAfterSpeak=true; return; }
+  sessionNo++; sessionInfo='#'+sessionNo+' '+origin;
+  rec=new SR(); rec.lang='zh-TW'; rec.interimResults=true; rec.maxAlternatives=3; rec.continuous=false;
   manualStop=false;
-  rec.onstart=()=>{ listening=true; updateMic(); $('heard').innerHTML='<span class="lbl">收音中…請說話</span>'; resetIdle(); };
+  rec.onstart=()=>{ listening=true; updateMic(); $('heard').innerHTML='<span class="lbl">收音中…請說話（'+esc(origin)+'）</span>'; if(!state.pick) resetIdle(); };
   rec.onresult=e=>{
-    resetIdle();
+    lastHeard=Date.now();
     for(let i=e.resultIndex;i<e.results.length;i++){
       const r=e.results[i];
       if(!r.isFinal){ $('heard').innerHTML='<span class="lbl">聽到中：</span>'+esc(r[0].transcript); continue; }
@@ -334,27 +394,36 @@ function startListen(){
     }
   };
   rec.onerror=e=>{
-    const map={'not-allowed':'麥克風權限被拒（或手機不准自動開麥克風）','no-speech':'沒聽到聲音','audio-capture':'找不到麥克風','network':'網路問題（辨識要連網）','aborted':'已中斷'};
+    const map={'not-allowed':'麥克風權限被拒（或手機不准自動開麥克風）','no-speech':'沒聽到聲音','audio-capture':'找不到麥克風','network':'網路問題（辨識要連網）','aborted':'已中斷','service-not-allowed':'手機不准用語音辨識'};
+    if(e.error!=='aborted') sysLog('錯誤：'+e.error+'（'+(map[e.error]||'')+'）');
     if(e.error!=='no-speech'&&e.error!=='aborted') showResult('err','收音錯誤：'+(map[e.error]||e.error));
-    if(e.error==='not-allowed') { state.pick=false; manualStop=true; }
+    if(e.error==='not-allowed'||e.error==='service-not-allowed') { state.pick=false; manualStop=true; }
   };
   rec.onend=()=>{
     listening=false; updateMic();
-    if(state.pick && !manualStop){ setTimeout(()=>{ try{ startListen(); }catch(err){ showResult('err','手機不准自動重新收音，請再按一下麥克風'); } },250); }
-    else if(pendingFollow){ pendingFollow=false; setTimeout(()=>{ try{ startListen(); $('heard').innerHTML='<span class="lbl">自動繼續聽（請念第幾個）…</span>'; }catch(err){ showResult('warn','手機不准自動繼續聽：請按麥克風再念「第幾個」，或直接點'); } },300); }
+    if(state.pick && !manualStop){
+      if(Date.now()-lastHeard > PICK_IDLE){ state.pick=false; render(); showResult('info','安靜 20 秒，點交模式自動停止'); sysLog('點交模式：安靜 20 秒自動停止'); return; }
+      if(speaking){ resumeAfterSpeak=true; return; }
+      autoStart('點交自動重開');
+    }
+    else if(pendingFollow && !manualStop){ pendingFollow=false; if(speaking){ resumeAfterSpeak=true; } else autoStart('自動繼續聽'); }
     else $('heard').innerHTML='<span class="lbl">已停止收音。按麥克風再說一次</span>';
   };
-  try{ rec.start(); }catch(err){ showResult('err','無法開始收音：'+err.message); }
+  try{ rec.start(); }catch(err){ sysLog('無法開始收音：'+err.message+'（'+origin+'）'); showResult('err','無法開始收音：'+err.message); }
 }
-function stopListen(){ manualStop=true; clearTimeout(idleTimer); try{ rec&&rec.stop(); }catch(e){} }
-function stopPick(msg){ if(state.pick){ state.pick=false; stopListen(); } }
-function resetIdle(){ clearTimeout(idleTimer); idleTimer=setTimeout(()=>{ if(state.pick){ stopPick(); render(); showResult('info','安靜 20 秒，點交模式自動停止'); } else stopListen(); }, state.pick?20000:8000); }
+function stopListen(){ manualStop=true; pendingFollow=false; resumeAfterSpeak=false; clearTimeout(idleTimer); try{ rec&&rec.stop(); }catch(e){} }
+function stopPick(){ if(state.pick){ state.pick=false; stopListen(); } }
+function resetIdle(){ clearTimeout(idleTimer); idleTimer=setTimeout(()=>{ if(!state.pick) stopListen(); }, 8000); }
+const _origAct = act;
+act = function(cmd){ const r=_origAct(cmd); if(cmd.intent==='PICK' && state.pick) lastHeard=Date.now(); return r; };
 $('mic').onclick=()=>{
   if(actx&&actx.state==='suspended') actx.resume();
   if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
-  if(listening){ if(state.pick){ stopPick(); render(); showResult('info','已停止點交模式'); } else stopListen(); }
-  else startListen();
+  if(TTS){ try{ const u=new SpeechSynthesisUtterance(''); TTS.speak(u); }catch(e){} }
+  if(listening || speaking){ if(state.pick){ stopPick(); TTS&&TTS.cancel(); speaking=false; render(); showResult('info','已停止點交模式'); } else { stopListen(); TTS&&TTS.cancel(); speaking=false; } }
+  else { lastHeard=Date.now(); startListen('按鈕'); }
 };
+if(TTS && TTS.onvoiceschanged!==undefined) TTS.onvoiceschanged=()=>{};
 render(); drawLog();
 </script>
 </body>
