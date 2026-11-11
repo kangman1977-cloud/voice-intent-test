@@ -208,10 +208,10 @@ function act(cmd){
     case 'STOP': state.pick=false; stopAll(); return ['info','已停止收音'];
     case 'LEAVEPICK': if(!state.pick) return ['info','目前不在點交模式']; state.pick=false; return ['info','已結束點交模式，繼續聽'];
     case 'BACK': stopPick(); state.screen='board'; state.caseId=null; state.openItem=null; state.choices=null; return ['info','回到大盤'];
-    case 'CANCEL': state.choices=null; return ['info','已取消選擇'];
+    case 'CANCEL': state.choices=null; state.afterChoose=null; return ['info','已取消選擇'];
     case 'NOLIST': return ['warn','現在沒有清單，請先說「我的案件」'];
     case 'UNCLEAR': return ['warn','號碼沒聽清楚，請再念一次'];
-    case 'MY': { const list=cases.filter(c=>c.mine); state.screen='board'; state.caseId=null; stopPick(); state.choices=list; wantFollowUp=true; return ['info','你的案件有 '+list.length+' 張，請念「第幾個」']; }
+    case 'MY': { state.afterChoose=null; const list=cases.filter(c=>c.mine); state.screen='board'; state.caseId=null; stopPick(); state.choices=list; wantFollowUp=true; return ['info','你的案件有 '+list.length+' 張，請念「第幾個」']; }
     case 'CASE': {
       const list=cases.filter(c=>tail(c.id)===cmd.n);
       if(!list.length) return ['err','大盤上沒有尾數 '+pad4(cmd.n)+' 的案件'];
@@ -221,8 +221,8 @@ function act(cmd){
     case 'CUST': { const c=cases.find(x=>x.id===cmd.id); const list=cases.filter(x=>x.cust===c.cust);
       if(list.length===1){ openCase(c.id); return ['ok','已打開 '+c.id+'（'+c.cust+'）']; }
       state.choices=list; wantFollowUp=true; return ['warn','請念「第幾個」']; }
-    case 'CHOOSE': { const c=state.choices&&state.choices[cmd.n-1]; if(!c) return ['err','清單上沒有第 '+cmd.n+' 個']; openCase(c.id); return ['ok','已打開 '+c.id+'（'+c.cust+'）']; }
-    case 'CHOOSE_ID': { openCase(cmd.id); const c=curCase(); return ['ok','已打開 '+c.id+'（'+c.cust+'）']; }
+    case 'CHOOSE': { const c=state.choices&&state.choices[cmd.n-1]; if(!c) return ['err','清單上沒有第 '+cmd.n+' 個']; const ai=state.afterChoose; state.afterChoose=null; openCase(c.id); return ai==='info'?['info',caseInfo(c)]:['ok','已打開 '+c.id+'（'+c.cust+'）']; }
+    case 'CHOOSE_ID': { const ai=state.afterChoose; state.afterChoose=null; openCase(cmd.id); const c=curCase(); return ai==='info'?['info',caseInfo(c)]:['ok','已打開 '+c.id+'（'+c.cust+'）']; }
     case 'VIEW': {
       if(state.screen!=='case') return ['err','請先打開一張案件（例如念「我的案件」）'];
       const it=curCase().items.find(i=>i.no===cmd.n); if(!it) return ['err','這張單沒有項次 '+pad4(cmd.n)];
@@ -239,7 +239,7 @@ function act(cmd){
     case 'CASEINFO_N': {
       const list=cases.filter(c=>tail(c.id)===cmd.n);
       if(!list.length) return ['err','大盤上沒有尾數 '+pad4(cmd.n)+' 的案件'];
-      if(list.length>1){ state.choices=list; return ['warn','有 '+list.length+' 張尾數 '+pad4(cmd.n)+'，請念「第幾個」']; }
+      if(list.length>1){ state.choices=list; state.afterChoose='info'; return ['warn','有 '+list.length+' 張尾數 '+pad4(cmd.n)+'，請念「第幾個」']; }
       openCase(list[0].id); return ['info',caseInfo(list[0])];
     }
     case 'ITEMINFO': { const it=curCase().items.find(i=>i.no===cmd.n); if(!it) return ['err','這張單沒有 '+pad4(cmd.n)]; state.openItem=it.no; return ['info',pad4(it.no)+'，'+it.name+'，'+(it.done?'已點交':'還沒點交')]; }
